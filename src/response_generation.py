@@ -3,6 +3,8 @@ from transformers import pipeline, AutoTokenizer
 import json
 import re
 
+from src.arxiv_api_client import fetch_and_parse_arxiv
+
 conversation_history = []
 model_name = "meta-llama/Llama-3.1-8B-Instruct"
 # Initialize tokenizer for chat template
@@ -16,36 +18,37 @@ llm = pipeline(
     tokenizer=tokenizer
 )
 
-# 2. `search_zenodo(query)` - For searching research papers on zenodo. Use this when the user asks about research topics, papers, or scientific information.
-# System prompt instructing the model about function calls
-SYSTEM_PROMPT = """You are a helpful research assistant. 
-You will first understand user's questions and compose search queries according to the questions.
-You will then call search functions to search on an academic paper websites like arxiv.org with search queries.
+SYSTEM_PROMPT = """[ROLE]
+You are a non-conversational API bridge. Your ONLY purpose is to translate user intent into a search_arxiv function call.
 
-You have access to one functions:
-1. `search_arxiv(query)` - For searching research papers on arXiv. Use this when the user asks about research topics, papers, or scientific information.
+[CONSTRAINT]
+- DO NOT explain.
+- DO NOT apologize.
+- DO NOT use markdown backticks (```json).
+- DO NOT provide a "normal response."
+- If you cannot find a query, output: {"function": "none"}
 
-When you call a function, output ONLY a valid JSON object in this exact format:
-{"function": "function_name", "arguments": {"argument_name": "argument_value"}}
+[FUNCTION_SCHEMA]
+{"function": "search_arxiv", "arguments": {"query": "string"}}
 
-Examples:
-- For research: {"function": "search_arxiv", "arguments": {"query": "quantum entanglement"}}
+[EXAMPLES]
+User: "Search for quantum computing."
+Assistant: {"function": "search_arxiv", "arguments": {"query": "all:quantum AND all:computing"}}
 
-IMPORTANT: Output ONLY the JSON object (no markdown, no code blocks, no explanation) when making a function call. For normal responses, output plain text."""
+User: "Find papers by Einstein."
+Assistant: {"function": "search_arxiv", "arguments": {"query": "au:Einstein"}}
+"""
 
 def generate_response(user_text):
+    # Prepare messages with system prompt (only add system prompt once at the start)
+    if len(conversation_history) == 0:  # First user message
+        conversation_history.append({"role": "system", "content": SYSTEM_PROMPT})
     # Add user message to history
     conversation_history.append({"role": "user", "content": user_text})
     
-    # Prepare messages with system prompt (only add system prompt once at the start)
-    messages = []
-    if len(conversation_history) == 1:  # First user message
-        messages.append({"role": "system", "content": SYSTEM_PROMPT})
-    messages.extend(conversation_history)
-    
     # Apply chat template
     prompt = tokenizer.apply_chat_template(
-        messages,
+        conversation_history,
         tokenize=False,
         add_generation_prompt=True
     )
@@ -53,6 +56,7 @@ def generate_response(user_text):
     # Generate response with temperature=0 for deterministic output
     outputs = llm(
         prompt,
+        temperature=0.0,
         max_new_tokens=200,
         return_full_text=False,
         do_sample=False
@@ -68,33 +72,35 @@ def generate_response(user_text):
     return final_response
 
 def search_arxiv(query):
-    return "I'm sorry, I can't search the web for you."
+    arxiv_response = fetch_and_parse_arxiv(query, max_results=5)
+
+    if arxiv_response.papers and len(arxiv_response.papers) > 0:
+        # Format the results nicely
+        results = []
+        for paper in arxiv_response.papers:
+            result = f"**{paper.title}**\n"
+            result += f"Authors: {', '.join(paper.authors)}\n"
+            result += f"Published: {paper.published_date.strftime('%Y-%m-%d') if paper.published_date else 'Unknown'}\n"
+            result += f"Abstract: {paper.summary[:200]}...\n"
+            result += f"PDF: {paper.pdf_url}\n"
+            result += f"Abstract URL: {paper.abstract_url}\n"
+            results.append(result)
+
+        return "\n\n".join(results)
+    else:
+        return f"No papers found for query: {query}"
 
 def route_llm_output(llm_output: str) -> str:
     """
     Route LLM response to the correct tool if it's a function call, else return the text.
-    Expects LLM output in JSON format like {'function': ..., 'arguments': {...}}.
-    Handles cases where JSON might be embedded in text or have markdown formatting.
+    Expects LLM output in JSON format like {"function": "...", "arguments": {...}}.
     """
-    # Try to extract JSON from the output (handle markdown code blocks, etc.)
-    text = llm_output.strip()
-    
-    # Remove markdown code blocks if present
-    if text.startswith("```json"):
-        text = text[7:]  # Remove ```json
-    elif text.startswith("```"):
-        text = text[3:]  # Remove ```
-    if text.endswith("```"):
-        text = text[:-3]  # Remove closing ```
-    text = text.strip()
-    
-    # Try to find JSON object in the text
+    # Try to parse the entire output as JSON directly
     try:
-        # First, try parsing the entire text
-        output = json.loads(text)
+        output = json.loads(llm_output.strip())
     except json.JSONDecodeError:
         # If that fails, try to extract JSON object from the text
-        json_match = re.search(r'\{[^{}]*"function"[^{}]*\}', text)
+        json_match = re.search(r'\{[^{}]*"function"[^{}]*\}', llm_output)
         if json_match:
             try:
                 output = json.loads(json_match.group())
@@ -104,16 +110,19 @@ def route_llm_output(llm_output: str) -> str:
         else:
             # Not a JSON function call; return the text directly
             return llm_output
-    
+
     # Extract function name and arguments
     func_name = output.get("function")
     args = output.get("arguments", {})
-    
+
     if not func_name:
         # Invalid JSON structure; return the text directly
         return llm_output
 
-    if func_name == "search_arxiv":
+    if func_name == "none":
+        # No function call needed; return empty or default response
+        return ""
+    elif func_name == "search_arxiv":
         query = args.get("query", "")
         return search_arxiv(query)
     else:

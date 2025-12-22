@@ -16,21 +16,20 @@ llm = pipeline(
     tokenizer=tokenizer
 )
 
+# 2. `search_zenodo(query)` - For searching research papers on zenodo. Use this when the user asks about research topics, papers, or scientific information.
 # System prompt instructing the model about function calls
-SYSTEM_PROMPT = """You are a helpful research assistant. You can answer questions directly or use function calls when appropriate.
+SYSTEM_PROMPT = """You are a helpful research assistant. 
+You will first understand user's questions and compose search queries according to the questions.
+You will then call search functions to search on an academic paper websites like arxiv.org with search queries.
 
-You have access to two functions:
-1. `calculate(expression)` - For mathematical calculations. Use this when the user asks you to compute, calculate, or solve a math problem.
-2. `search_arxiv(query)` - For searching research papers on arXiv. Use this when the user asks about research topics, papers, or scientific information.
+You have access to one functions:
+1. `search_arxiv(query)` - For searching research papers on arXiv. Use this when the user asks about research topics, papers, or scientific information.
 
-When you need to call a function, output ONLY a valid JSON object in this exact format:
+When you call a function, output ONLY a valid JSON object in this exact format:
 {"function": "function_name", "arguments": {"argument_name": "argument_value"}}
 
 Examples:
-- For math: {"function": "calculate", "arguments": {"expression": "2+2"}}
 - For research: {"function": "search_arxiv", "arguments": {"query": "quantum entanglement"}}
-
-If the user's question can be answered directly without needing a function call, respond normally in plain text.
 
 IMPORTANT: Output ONLY the JSON object (no markdown, no code blocks, no explanation) when making a function call. For normal responses, output plain text."""
 
@@ -56,7 +55,6 @@ def generate_response(user_text):
         prompt,
         max_new_tokens=200,
         return_full_text=False,
-        temperature=0,
         do_sample=False
     )
     bot_response = outputs[0]["generated_text"].strip()
@@ -71,17 +69,6 @@ def generate_response(user_text):
 
 def search_arxiv(query):
     return "I'm sorry, I can't search the web for you."
-
-def calculate(expression):
-    """
-    Evaluate a mathematical expression and return the result as a string.
-    """
-    try:
-        from sympy import sympify
-        result = sympify(expression)  # use sympy for safe evaluation
-        return str(result)
-    except Exception as e:
-        return f"Error: {e}"
 
 def route_llm_output(llm_output: str) -> str:
     """
@@ -129,8 +116,5 @@ def route_llm_output(llm_output: str) -> str:
     if func_name == "search_arxiv":
         query = args.get("query", "")
         return search_arxiv(query)
-    elif func_name == "calculate":
-        expr = args.get("expression", "")
-        return calculate(expr)
     else:
         return f"Error: Unknown function '{func_name}'"

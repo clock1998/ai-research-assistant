@@ -74,7 +74,7 @@ class Paper:
         """Convert to JSON string"""
         return json.dumps(self.to_dict(), indent=2, ensure_ascii=False, default=str)
 
-def parse_arxiv_entry(entry) -> Paper:
+def _parse_arxiv_entry(entry) -> Paper:
     """Parse a single arXiv entry from feedparser entry and return as Paper object"""
 
     # Extract basic information
@@ -170,7 +170,7 @@ def fetch_and_parse_arxiv(query='all:electron', start=0, max_results=1) -> Arxiv
         # Extract papers from feed entries
         papers = []
         for entry in feed.entries:
-            paper = parse_arxiv_entry(entry)
+            paper = _parse_arxiv_entry(entry)
             papers.append(paper)
 
         return ArxivResponse(

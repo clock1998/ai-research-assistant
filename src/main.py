@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Response, UploadFile, File
-from src.response_generation import generate_response
-from src.text_to_speech import synthesize_speech
-from src.transcribe_audio import transcribe_audio
+from response_generation import generate_response
+from text_to_speech import synthesize_speech
+from transcribe_audio import transcribe_audio
 import gradio as gr
 import tempfile
 import os

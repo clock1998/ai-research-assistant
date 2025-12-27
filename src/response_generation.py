@@ -4,8 +4,10 @@ import json
 import re
 
 from src.arxiv_api_client import fetch_and_parse_arxiv
+from src.reranker import rerank_crossencoder
 
 conversation_history = []
+original_user_question = ""
 model_name = "meta-llama/Llama-3.1-8B-Instruct"
 # Initialize tokenizer for chat template
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -26,6 +28,7 @@ Use field prefixes: ti: (title), au: (author), abs: (abstract), cat: (category).
 Use Boolean operators: AND, OR, ANDNOT (must be capitalized).
 Group terms using parentheses.
 If the user mentions a specific field (e.g., "find papers by Hinton"), use au:.
+If a user is looking for a specific concept, you should use Title(ti:) or Abstract(abs:).
 Query Expansion: Include synonyms (e.g., "LLM" OR "Large Language Model").
 
 [FUNCTION_SCHEMA]
@@ -40,12 +43,13 @@ Assistant: {"function": "search_arxiv", "arguments": {"query": "au:Einstein"}}
 """
 
 def generate_response(user_text):
+    global original_user_question
     # Prepare messages with system prompt (only add system prompt once at the start)
     if len(conversation_history) == 0:  # First user message
         conversation_history.append({"role": "system", "content": SYSTEM_PROMPT})
     # Add user message to history
     conversation_history.append({"role": "user", "content": user_text})
-    
+    original_user_question = user_text;
     # Apply chat template
     prompt = tokenizer.apply_chat_template(
         conversation_history,
@@ -70,25 +74,6 @@ def generate_response(user_text):
     conversation_history.append({"role": "assistant", "content": bot_response})
     
     return final_response
-
-def search_arxiv(query):
-    arxiv_response = fetch_and_parse_arxiv(query, max_results=5)
-
-    if arxiv_response.papers and len(arxiv_response.papers) > 0:
-        # Format the results nicely
-        results = []
-        for paper in arxiv_response.papers:
-            result = f"**{paper.title}**\n"
-            result += f"Authors: {', '.join(paper.authors)}\n"
-            result += f"Published: {paper.published_date.strftime('%Y-%m-%d') if paper.published_date else 'Unknown'}\n"
-            result += f"Abstract: {paper.summary[:200]}...\n"
-            result += f"PDF: {paper.pdf_url}\n"
-            result += f"Abstract URL: {paper.abstract_url}\n"
-            results.append(result)
-
-        return "\n\n".join(results)
-    else:
-        return f"No papers found for query: {query}"
 
 def route_llm_output(llm_output: str) -> str:
     """
@@ -124,6 +109,33 @@ def route_llm_output(llm_output: str) -> str:
         return ""
     elif func_name == "search_arxiv":
         query = args.get("query", "")
-        return search_arxiv(query)
+        return _search_arxiv(query)
     else:
         return f"Error: Unknown function '{func_name}'"
+
+def _search_arxiv(query):
+    arxiv_response = fetch_and_parse_arxiv(query, max_results=50)
+
+    if arxiv_response.papers and len(arxiv_response.papers) > 0:
+        # Prepare summaries to rerank
+        paper_summaries = [paper.summary for paper in arxiv_response.papers]
+        scores = rerank_crossencoder(original_user_question, paper_summaries)
+        
+        # Pair each paper with its score, then sort by score descending
+        papers_and_scores = list(zip(arxiv_response.papers, scores))
+        papers_and_scores.sort(key=lambda x: x[1], reverse=True)
+
+        # Format the sorted results
+        results = []
+        for paper, _ in papers_and_scores:
+            result = f"**{paper.title}**\n"
+            result += f"Authors: {', '.join(paper.authors)}\n"
+            result += f"Published: {paper.published_date.strftime('%Y-%m-%d') if paper.published_date else 'Unknown'}\n"
+            result += f"Abstract: {paper.summary}\n"
+            result += f"PDF: {paper.pdf_url}\n"
+            result += f"Abstract URL: {paper.abstract_url}\n"
+            results.append(result)
+
+        return "\n\n".join(results)
+    else:
+        return f"No papers found for query: {query}"

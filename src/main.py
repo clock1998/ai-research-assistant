@@ -21,16 +21,22 @@ async def chat_endpoint(file: UploadFile = File(...)):
     return Response(content=response_audio, media_type="audio/wav")
 
 # Gradio interface function
-def chat_interface(audio_file, history):
-    if audio_file is None:
+def chat_interface(input_data, history):
+    # Determine if input is text or audio
+    if isinstance(input_data, str) and input_data.strip():
+        # Text input provided
+        user_text = input_data.strip()
+    elif input_data is not None:
+        # Audio input provided
+        # Read the audio file
+        with open(input_data, "rb") as f:
+            audio_bytes = f.read()
+
+        # Process through your pipeline
+        user_text = transcribe_audio(audio_bytes)
+    else:
+        # No input provided
         return history, None
-    
-    # Read the audio file
-    with open(audio_file, "rb") as f:
-        audio_bytes = f.read()
-    
-    # Process through your pipeline
-    user_text = transcribe_audio(audio_bytes)
     print(f"User said: {user_text}")
     
     # Initialize history if None
@@ -71,6 +77,17 @@ with gr.Blocks(title="Voice Chat Assistant") as demo:
     )
     
     with gr.Row():
+        text_input = gr.Textbox(
+            label="Type your message",
+            placeholder="Or type your message here...",
+            show_label=True,
+            interactive=True,
+            lines=1,
+            container=True,
+            elem_id="text_input_box"
+        )
+        send_btn = gr.Button("Send")
+
         audio_input = gr.Audio(
             sources=["microphone", "upload"],
             type="filepath",
@@ -86,6 +103,13 @@ with gr.Blocks(title="Voice Chat Assistant") as demo:
     # Clear button
     clear_btn = gr.Button("Clear Conversation", variant="secondary")
     
+    # Process text input
+    send_btn.click(
+        fn=chat_interface,
+        inputs=[text_input, chatbot],
+        outputs=[chatbot, audio_output]
+    )
+
     # Process audio input
     audio_input.change(
         fn=chat_interface,

@@ -18,15 +18,15 @@ llm = pipeline(
     tokenizer=tokenizer
 )
 
-SYSTEM_PROMPT = """[ROLE]
-You are a non-conversational API bridge. Your ONLY purpose is to translate user intent into a search_arxiv function call.
+SYSTEM_PROMPT = """
+You are a search query engineer. Your goal is to transform a user's research question into a precise arXiv API query string.
 
-[CONSTRAINT]
-- DO NOT explain.
-- DO NOT apologize.
-- DO NOT use markdown backticks (```json).
-- DO NOT provide a "normal response."
-- If you cannot find a query, output: {"function": "none"}
+Rules:
+Use field prefixes: ti: (title), au: (author), abs: (abstract), cat: (category).
+Use Boolean operators: AND, OR, ANDNOT (must be capitalized).
+Group terms using parentheses.
+If the user mentions a specific field (e.g., "find papers by Hinton"), use au:.
+Query Expansion: Include synonyms (e.g., "LLM" OR "Large Language Model").
 
 [FUNCTION_SCHEMA]
 {"function": "search_arxiv", "arguments": {"query": "string"}}

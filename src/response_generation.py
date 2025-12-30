@@ -134,20 +134,58 @@ class ResearchAssistant:
             papers_and_scores = list(zip(arxiv_response.papers, scores))
             papers_and_scores.sort(key=lambda x: x[1], reverse=True)
 
-            # Format the sorted results
+            # Take only the first 5 papers
+            top_papers = papers_and_scores[:5]
+
+            # Generate human-readable summaries for each paper
             results = []
-            for paper, _ in papers_and_scores:
-                result = f"**{paper.title}**\n"
-                result += f"Authors: {', '.join(paper.authors)}\n"
-                result += f"Published: {paper.published_date.strftime('%Y-%m-%d') if paper.published_date else 'Unknown'}\n"
-                result += f"Abstract: {paper.summary}\n"
-                result += f"PDF: {paper.pdf_url}\n"
-                result += f"Abstract URL: {paper.abstract_url}\n"
-                results.append(result)
+            for paper, score in top_papers:
+                summary = self._generate_paper_summary(paper, score)
+                results.append(summary)
 
             return "\n\n".join(results)
         else:
             return f"No papers found for query: {query}"
+
+    def _generate_paper_summary(self, paper, score):
+        """Generate a human-readable summary of a paper using the LLM."""
+        prompt = f"""
+        You are a research assistant summarizing academic papers. Create a natural, engaging summary of the following paper that includes all key information in a conversational tone.
+
+        Paper Title: {paper.title}
+        Authors: {', '.join(paper.authors)}
+        Published: {paper.published_date.strftime('%Y-%m-%d') if paper.published_date else 'Unknown'}
+        Abstract: {paper.summary}
+        PDF URL: {paper.pdf_url}
+        Relevance Score: {score:.4f}
+
+        Write a comprehensive summary that covers:
+        1. What the paper is about (based on title and abstract)
+        2. Key contributions or findings
+        3. Who wrote it and when it was published
+        4. Links to access the full paper
+
+        Make it sound natural and informative, like you're explaining it to someone interested in the field.
+        """
+
+        # Apply chat template for single-turn conversation
+        messages = [{"role": "user", "content": prompt}]
+        chat_prompt = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+
+        # Generate response
+        outputs = self.llm(
+            chat_prompt,
+            temperature=0.7,  # Slightly higher temperature for more natural language
+            max_new_tokens=400,
+            return_full_text=False,
+            do_sample=True
+        )
+
+        return outputs[0]["generated_text"].strip()
 
 
 # Create a module-level instance for backward compatibility

@@ -21,7 +21,7 @@ async def chat_endpoint(file: UploadFile = File(...)):
     return Response(content=response_audio, media_type="audio/wav")
 
 # Gradio interface function
-def chat_interface(input_data, history):
+async def chat_interface(input_data, history):
     # Determine if input is text or audio
     if isinstance(input_data, str) and input_data.strip():
         # Text input provided
@@ -53,8 +53,8 @@ def chat_interface(input_data, history):
     # Add assistant response to history (new format)
     history.append({"role": "assistant", "content": generated_text})
     
-    # Synthesize speech
-    audio_data = synthesize_speech(generated_text)
+    # Synthesize speech asynchronously
+    audio_data = await synthesize_speech(generated_text)
     
     # Save synthesized audio to temporary file for Gradio
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
@@ -69,9 +69,9 @@ def chat_interface(input_data, history):
 with gr.Blocks(title="Voice Chat Assistant") as demo:
     gr.Markdown("# Voice Chat Assistant")
     gr.Markdown("Record your voice or upload an audio file to chat with the AI assistant. Your transcribed text and the AI's response will be displayed in the conversation.")
-    
+
     chatbot = gr.Chatbot(
-        label="Conversation",
+        label="Conversation History",
         height=400,
         show_label=True
     )
@@ -116,7 +116,7 @@ with gr.Blocks(title="Voice Chat Assistant") as demo:
         inputs=[audio_input, chatbot],
         outputs=[chatbot, audio_output]
     )
-    
+
     # Clear conversation
     clear_btn.click(
         fn=lambda: ([], None),

@@ -2,11 +2,16 @@ from fastapi import FastAPI, Response, UploadFile, File
 from src.response_generation import generate_response
 from src.text_to_speech import synthesize_speech
 from src.transcribe_audio import transcribe_audio
+from src.notion_uploader import upload_research_summary
 import gradio as gr
 import tempfile
 import os
 import soundfile as sf
 import numpy as np
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI()
 
@@ -17,6 +22,14 @@ async def chat_endpoint(file: UploadFile = File(...)):
     print(user_text)
     generated_text = generate_response(user_text)
     print(generated_text)
+
+    # Upload to Notion (optional - will only work if environment variables are set)
+    try:
+        notion_url = upload_research_summary(user_text, generated_text)
+        print(f"Uploaded to Notion: {notion_url}")
+    except Exception as e:
+        print(f"Notion upload failed: {e}")
+
     response_audio = synthesize_speech(generated_text)
     return Response(content=response_audio, media_type="audio/wav")
 
@@ -49,7 +62,16 @@ async def chat_interface(input_data, history):
     # Generate response
     generated_text = generate_response(user_text)
     print(f"Generated: {generated_text}")
-    
+
+    # Upload to Notion (optional - will only work if environment variables are set)
+    try:
+        notion_url = upload_research_summary(user_text, generated_text)
+        print(f"Uploaded to Notion: {notion_url}")
+        # Add Notion URL to the response
+        generated_text += f"\n\n📝 [View in Notion]({notion_url})"
+    except Exception as e:
+        print(f"Notion upload failed: {e}")
+
     # Add assistant response to history (new format)
     history.append({"role": "assistant", "content": generated_text})
     

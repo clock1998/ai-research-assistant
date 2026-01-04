@@ -29,16 +29,28 @@ def test_notion_upload():
 
     print("✅ Environment variables are set")
 
-    # Test data
+    # Test data - create a longer text to test chunking
     user_query = "Test research query about machine learning"
-    generated_text = """This is a test research summary.
+    generated_text = """This is a test research summary with longer content to verify that the chunking algorithm works correctly when content exceeds Notion's 2000 character limit per block.
 
-Here are some key findings:
-1. Machine learning is a subset of AI
-2. Deep learning uses neural networks
-3. Transformers revolutionized NLP
+Here are some key findings from the research:
+1. Machine learning is a subset of artificial intelligence that focuses on algorithms that can learn from data without being explicitly programmed
+2. Deep learning uses neural networks with multiple layers to process complex patterns in data
+3. Transformers revolutionized natural language processing through attention mechanisms
+4. Reinforcement learning enables agents to learn optimal behavior through trial and error
+5. Computer vision applications include image classification, object detection, and facial recognition
 
-For more information, check the referenced papers."""
+The field has seen tremendous growth in recent years, with applications spanning healthcare, finance, transportation, and entertainment. Neural networks, particularly convolutional neural networks (CNNs) and recurrent neural networks (RNNs), have become foundational technologies.
+
+Research continues to advance in areas such as:
+- Explainable AI to make model decisions more interpretable
+- Federated learning for privacy-preserving distributed training
+- Meta-learning for few-shot learning scenarios
+- Multi-modal learning combining text, images, and other data types
+
+The impact of these technologies on society is profound, enabling new capabilities while raising important ethical considerations around bias, privacy, and responsible AI development.
+
+For more information, check the referenced papers and ongoing research in top conferences like NeurIPS, ICML, and CVPR. The field continues to evolve rapidly with new architectures and applications emerging regularly."""
 
     try:
         print("📤 Attempting to upload to Notion...")

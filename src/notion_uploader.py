@@ -17,6 +17,42 @@ class NotionUploader:
 
         self.client = Client(auth=self.api_key)
 
+    def _split_text_into_chunks(self, text: str, max_length: int = 2000) -> list[str]:
+        """
+        Split text into chunks that fit within Notion's character limits.
+
+        Args:
+            text: The text to split
+            max_length: Maximum characters per chunk (default 2000 for Notion)
+
+        Returns:
+            List of text chunks
+        """
+        if len(text) <= max_length:
+            return [text]
+
+        chunks = []
+        words = text.split(' ')
+        current_chunk = ""
+
+        for word in words:
+            # Check if adding this word would exceed the limit
+            potential_chunk = current_chunk + " " + word if current_chunk else word
+
+            if len(potential_chunk) <= max_length:
+                current_chunk = potential_chunk
+            else:
+                # Save current chunk and start a new one
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = word
+
+        # Add the last chunk if it has content
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+
+        return chunks
+
     def upload_research_summary(self, user_query: str, generated_text: str, title: str = None):
         """
         Upload a research summary to Notion.
@@ -35,6 +71,42 @@ class NotionUploader:
                 # Use first 50 characters of user query as title
                 title = f"Research: {user_query[:50]}{'...' if len(user_query) > 50 else ''}"
 
+            # Split the generated text into chunks that fit Notion's limits
+            text_chunks = self._split_text_into_chunks(generated_text)
+
+            # Create paragraph blocks for each chunk
+            children_blocks = [
+                {
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [
+                            {
+                                "text": {
+                                    "content": "Research Summary"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+
+            # Add each text chunk as a separate paragraph block
+            for chunk in text_chunks:
+                children_blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [
+                            {
+                                "text": {
+                                    "content": chunk
+                                }
+                            }
+                        ]
+                    }
+                })
+
             # Create the page content
             page_data = {
                 "parent": {"database_id": self.database_id},
@@ -52,7 +124,7 @@ class NotionUploader:
                         "rich_text": [
                             {
                                 "text": {
-                                    "content": user_query
+                                    "content": user_query[:2000]  # Limit query length too
                                 }
                             }
                         ]
@@ -63,34 +135,7 @@ class NotionUploader:
                         }
                     }
                 },
-                "children": [
-                    {
-                        "object": "block",
-                        "type": "heading_2",
-                        "heading_2": {
-                            "rich_text": [
-                                {
-                                    "text": {
-                                        "content": "Research Summary"
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "object": "block",
-                        "type": "paragraph",
-                        "paragraph": {
-                            "rich_text": [
-                                {
-                                    "text": {
-                                        "content": generated_text
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                ]
+                "children": children_blocks
             }
 
             # Create the page

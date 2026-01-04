@@ -134,39 +134,36 @@ class ResearchAssistant:
             papers_and_scores = list(zip(arxiv_response.papers, scores))
             papers_and_scores.sort(key=lambda x: x[1], reverse=True)
 
-            # Take only the first 5 papers
-            top_papers = papers_and_scores[:5]
+            # Take only the first 3 papers
+            top_papers = papers_and_scores[:3]
 
-            # Generate human-readable summaries for each paper
-            results = []
-            for paper, score in top_papers:
-                summary = self._generate_paper_summary(paper, score)
-                results.append(summary)
-
-            return "\n\n".join(results)
+            # Generate human-readable summaries for all papers at once
+            return self._generate_paper_summary(top_papers)
         else:
             return f"No papers found for query: {query}"
 
-    def _generate_paper_summary(self, paper, score):
-        """Generate a human-readable summary of a paper using the LLM."""
-        prompt = f"""
-        You are a research assistant summarizing academic papers. Create a natural, engaging summary of the following paper that includes all key information in a conversational tone.
+    def _generate_paper_summary(self, papers_and_scores):
+        """Generate a human-readable summary of multiple papers using the LLM."""
+        prompt_parts = [
+            "You are a research assistant summarizing academic papers. Create natural, engaging summaries of the following papers that include all key information in a conversational tone."
+        ]
 
-        Paper Title: {paper.title}
-        Authors: {', '.join(paper.authors)}
-        Published: {paper.published_date.strftime('%Y-%m-%d') if paper.published_date else 'Unknown'}
-        Abstract: {paper.summary}
-        PDF URL: {paper.pdf_url}
-        Relevance Score: {score:.4f}
+        for i, (paper, score) in enumerate(papers_and_scores, 1):
+            prompt_parts.append(f"""
+            Title: {paper.title}
+            Abstract: {paper.summary}
+            PDF URL: {paper.pdf_url}
+            """)
 
-        Write a comprehensive summary that covers:
-        1. What the paper is about (based on title and abstract)
-        2. Key contributions or findings
-        3. Who wrote it and when it was published
-        4. Links to access the full paper
+        prompt_parts.append("""
+            For each paper, write a comprehensive summary that covers:
+            1. What the paper is about (based on title and abstract)
+            2. Links to access the full paper
 
-        Make it sound natural and informative, like you're explaining it to someone interested in the field.
-        """
+            Make it sound natural and informative, like you're explaining it to someone interested in the field. Organize the response clearly with titles.
+            """)
+
+        prompt = "\n".join(prompt_parts)
 
         # Apply chat template for single-turn conversation
         messages = [{"role": "user", "content": prompt}]
@@ -179,8 +176,8 @@ class ResearchAssistant:
         # Generate response
         outputs = self.llm(
             chat_prompt,
-            temperature=0.7,  # Slightly higher temperature for more natural language
-            max_new_tokens=400,
+            temperature=0.5,  # Slightly higher temperature for more natural language
+            max_new_tokens=1200,  # Increased for multiple papers
             return_full_text=False,
             do_sample=True
         )

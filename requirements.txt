@@ -158,6 +158,7 @@ safetensors==0.7.0
 scikit-learn==1.7.2
 scipy==1.11.4
 semantic-version==2.10.0
+sentence-transformers==5.2.0
 sentencepiece==0.2.1
 sentry-sdk==2.46.0
 sgmllib3k==1.0.0
